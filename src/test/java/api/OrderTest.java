@@ -5,7 +5,7 @@ import api.client.UserClient;
 import api.model.Order;
 import api.model.User;
 import io.qameta.allure.junit4.DisplayName;
-import io.qameta.allure.restassured.AllureRestAssured; // Импортируем фильтр Allure
+import io.qameta.allure.restassured.AllureRestAssured;
 import io.restassured.response.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.After;
@@ -50,7 +50,6 @@ public class OrderTest {
             validIngredients.clear();
         }
 
-        // Если динамический список пуст, подставляем актуальные резервные хэши
         if (validIngredients.isEmpty()) {
             validIngredients = Arrays.asList("61c0c5cd1d1f82001bda4651", "61c0c5cd1d1f82001bda4652");
         }
@@ -94,7 +93,11 @@ public class OrderTest {
 
         Order order = new Order(new ArrayList<>());
         Response response = orderClient.createOrder(order, token);
-        response.then().statusCode(400).body("success", equalTo(false));
+
+        // Исправлено: Добавлена проверка сообщения об ошибке
+        response.then().statusCode(400)
+                .body("success", equalTo(false))
+                .body("message", equalTo("Ingredient ids must be provided"));
     }
 
     @Test

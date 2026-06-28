@@ -15,24 +15,22 @@ import static org.hamcrest.Matchers.notNullValue;
 public class UserTest {
     private UserClient userClient;
     private String token;
+    private User existingUser; // Общий пользователь для тестов авторизации и дубликатов
 
-    // Вспомогательный метод для генерации случайного уникального пользователя
+    // Вспомогательный метод для генерации случайных данных
     private User generateRandomUser() {
         String email = RandomStringUtils.randomAlphanumeric(10).toLowerCase() + "@yandex.ru";
         return new User(email, "password123", "Nastya");
     }
 
-    // Вспомогательный метод предварительного создания пользователя в системе
-    private User registerTestUser() {
-        User user = generateRandomUser();
-        Response response = userClient.createUser(user);
-        token = response.path("accessToken");
-        return user;
-    }
-
     @Before
     public void setUp() {
         userClient = new UserClient();
+
+        // Создаем пользователя в системе перед КАЖДЫМ тестом (для тех тестов, где он необходим)
+        existingUser = generateRandomUser();
+        Response response = userClient.createUser(existingUser);
+        token = response.path("accessToken");
     }
 
     @After
@@ -46,22 +44,26 @@ public class UserTest {
     @Test
     @DisplayName("Создание уникального пользователя")
     public void createUniqueUserTest() {
-        User user = generateRandomUser();
+        // Чтобы тест проверял создание С нуля, генерируем нового юзера
+        User newUser = generateRandomUser();
 
-        Response response = userClient.createUser(user);
+        Response response = userClient.createUser(newUser);
         response.then().statusCode(200)
                 .body("success", equalTo(true))
                 .body("accessToken", notNullValue());
 
-        token = response.path("accessToken");
+        // Удаляем именно этого нового пользователя в конце теста
+        String newToken = response.path("accessToken");
+        if (newToken != null) {
+            userClient.deleteUser(newToken);
+        }
     }
 
     @Test
     @DisplayName("Создание пользователя, который уже зарегистрирован")
     public void createExistingUserTest() {
-        User user = registerTestUser(); // Вынесли создание во вспомогательный метод
-
-        Response response = userClient.createUser(user);
+        // Передаем пользователя, который УЖЕ был создан в setUp()
+        Response response = userClient.createUser(existingUser);
         response.then().statusCode(403)
                 .body("success", equalTo(false))
                 .body("message", equalTo("User already exists"));
@@ -103,9 +105,8 @@ public class UserTest {
     @Test
     @DisplayName("Вход под существующим пользователем")
     public void loginExistingUserTest() {
-        User user = registerTestUser(); // Вынесли создание во вспомогательный метод
-
-        Response response = userClient.loginUser(user);
+        // Используем пользователя, созданного в setUp()
+        Response response = userClient.loginUser(existingUser);
         response.then().statusCode(200)
                 .body("success", equalTo(true));
     }
@@ -113,24 +114,24 @@ public class UserTest {
     @Test
     @DisplayName("Вход с неверным логином (email)")
     public void loginWithWrongEmailTest() {
-        User validUser = registerTestUser(); // Регистрируем пользователя с валидным паролем
-        User userWithWrongEmail = new User("incorrect_email_999@yandex.ru", validUser.getPassword(), validUser.getName());
+        // Берем валидный пароль предсозданного юзера, но портим email
+        User userWithWrongEmail = new User("incorrect_email_999@yandex.ru", existingUser.getPassword(), existingUser.getName());
 
         Response response = userClient.loginUser(userWithWrongEmail);
         response.then().statusCode(401)
                 .body("success", equalTo(false))
-                .body("message", equalTo("email or password are incorrect")); // Добавили проверку тела ошибки
+                .body("message", equalTo("email or password are incorrect"));
     }
 
     @Test
     @DisplayName("Вход с неверным паролем")
     public void loginWithWrongPasswordTest() {
-        User validUser = registerTestUser(); // Регистрируем пользователя с валидным email
-        User userWithWrongPassword = new User(validUser.getEmail(), "wrong_password_abc", validUser.getName());
+        // Берем валидный email предсозданного юзера, но портим пароль
+        User userWithWrongPassword = new User(existingUser.getEmail(), "wrong_password_abc", existingUser.getName());
 
         Response response = userClient.loginUser(userWithWrongPassword);
         response.then().statusCode(401)
                 .body("success", equalTo(false))
-                .body("message", equalTo("email or password are incorrect")); // Добавили проверку тела ошибки
+                .body("message", equalTo("email or password are incorrect"));
     }
 }
